@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>情侣水滴打卡 - 每日饮水记录</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&family=Mochiy+Pop+One&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.0.1/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0/dist/chartjs-adapter-luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lottie-web@5.10.0/build/player/lottie.min.js"></script>
+    <style>
+        /* 快速修复样式 */
+        body {
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+        }
+        .water-level-container {
+            background-color: rgba(255, 255, 255, 0.9) !important;
+            border: 2px solid #e6f7ff !important;
+        }
+        .water-level {
+            max-height: 95% !important;
+        }
+        .user-btn {
+            cursor: pointer !important;
+            z-index: 100 !important;
+        }
+    </style>
+    <script>
+        // 内联JavaScript确保按钮可以点击
+        window.directSwitchUser = function(user) {
+            console.log('Direct switch to user:', user);
+            // 切换当前用户
+            window.currentUser = user;
+            
+            // 更新按钮状态
+            if (user === 'user1') {
+                document.getElementById('user1-btn').classList.add('active');
+                document.getElementById('user2-btn').classList.remove('active');
+            } else {
+                document.getElementById('user1-btn').classList.remove('active');
+                document.getElementById('user2-btn').classList.add('active');
+            }
+            
+            // 刷新页面
+            setTimeout(function() {
+                location.reload();
+            }, 100);
+        }
+    </script>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>情侣水滴打卡 <span class="subtitle">每日饮水好习惯</span></h1>
+            
+            <div class="user-switch">
+                <button type="button" id="user1-btn" class="user-btn active" onclick="directSwitchUser('user1')">我的打卡</button>
+                <button type="button" id="user2-btn" class="user-btn" onclick="directSwitchUser('user2')">伴侣打卡</button>
+            </div>
+            
+            <div class="water-bottles-container">
+                <div class="water-bottle-wrapper">
+                    <div class="water-level-container" id="user1-bottle">
+                        <div class="water-level" id="water-level-user1">
+                            <div class="water-waves"></div>
+                        </div>
+                        <div class="water-bottle-overlay"></div>
+                    </div>
+                    <div class="user-name" id="user1-name">我</div>
+                </div>
+                
+                <div class="love-connector">
+                    <div id="love-animation-container"></div>
+                </div>
+                
+                <div class="water-bottle-wrapper">
+                    <div class="water-level-container" id="user2-bottle">
+                        <div class="water-level" id="water-level-user2">
+                            <div class="water-waves"></div>
+                        </div>
+                        <div class="water-bottle-overlay"></div>
+                    </div>
+                    <div class="user-name" id="user2-name">伴侣</div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <section class="today-progress">
+    <h2 class="section-title">
+        <span id="current-user-title">我的饮水进度</span>
+        <div class="user-badge" id="current-user-badge"></div>
+    </h2>
+    <div class="progress-container">
+        <div class="progress-stats">
+            <div class="stat">
+                <span id="current-amount">0</span>
+                <span class="unit">毫升</span>
+                <span class="label">今日总量</span>
+            </div>
+            <div class="stat">
+                <span id="current-hour-amount">0</span>
+                <span class="unit">毫升</span>
+                <span class="label">本小时</span>
+            </div>
+            <div class="stat">
+                <span id="target-amount">2000</span>
+                <span class="unit">毫升</span>
+                <span class="label">每日目标</span>
+            </div>
+            <div class="stat">
+                <span id="percentage">0%</span>
+                <span class="label">完成度</span>
+            </div>
+        </div>
+    </div>
+    <div class="couple-status">
+        <div class="couple-message" id="couple-message">
+            <div class="message-bubble">还没有收到伴侣的鼓励消息～</div>
+        </div>
+        <button id="send-encouragement" class="encouragement-btn">发送鼓励 ❤️</button>
+    </div>
+    <!-- 动画互动容器 -->
+    <div id="drink-animation-container"></div>
+</section>
+
+            <section class="add-water">
+                <h2>记录饮水</h2>
+                <div class="water-options">
+                    <button class="water-option" data-amount="100">
+                        <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="小杯">
+                        <span>小杯</span>
+                        <span class="amount">100ml</span>
+                    </button>
+                    <button class="water-option" data-amount="200">
+                        <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="中杯">
+                        <span>中杯</span>
+                        <span class="amount">200ml</span>
+                    </button>
+                    <button class="water-option" data-amount="350">
+                        <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="大杯">
+                        <span>大杯</span>
+                        <span class="amount">350ml</span>
+                    </button>
+                    <button class="water-option" data-amount="500">
+                        <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="水瓶">
+                        <span>水瓶</span>
+                        <span class="amount">500ml</span>
+                    </button>
+                </div>
+                <div class="custom-amount">
+                    <input type="number" id="custom-amount" min="10" max="1000" step="10" placeholder="自定义毫升">
+                    <button id="add-custom">添加</button>
+                </div>
+            </section>
+
+            <section class="stats-section">
+    <h2 class="section-title">
+        <span id="stats-title">饮水数据</span>
+        <div class="tab-switch">
+            <button id="tab-charts" class="tab-btn active">图表</button>
+            <button id="tab-couple" class="tab-btn">情侣排行</button>
+        </div>
+    </h2>
+    
+    <div id="charts-tab" class="tab-content active">
+        <div class="chart-container">
+            <canvas id="weekly-chart"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="hourly-chart"></canvas>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="streak-count">0</div>
+                <div class="stat-label">连续打卡天数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-days">0</div>
+                <div class="stat-label">总打卡天数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="avg-completion">0%</div>
+                <div class="stat-label">平均完成度</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="best-day">-</div>
+                <div class="stat-label">最佳饮水日</div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="couple-tab" class="tab-content">
+        <div class="couple-competition">
+            <h3>本周情侣比拼</h3>
+            <div class="competition-bar-container">
+                <div class="user-label">
+                    <span id="user1-name-comp">我</span>
+                    <span id="user1-amount-comp">0ml</span>
+                </div>
+                <div class="competition-bar">
+                    <div class="user1-bar" id="user1-progress-bar"></div>
+                    <div class="user2-bar" id="user2-progress-bar"></div>
+                </div>
+                <div class="user-label">
+                    <span id="user2-amount-comp">0ml</span>
+                    <span id="user2-name-comp">伴侣</span>
+                </div>
+            </div>
+            <div class="competition-result" id="competition-result">
+                本周比赛进行中...
+            </div>
+        </div>
+        
+        <div class="couple-challenges">
+            <h3>情侣挑战</h3>
+            <div class="challenge-list" id="challenge-list">
+                <div class="challenge-item">
+                    <div class="challenge-icon">🎉</div>
+                    <div class="challenge-info">
+                        <div class="challenge-title">一起喝水挑战</div>
+                        <div class="challenge-desc">同一小时内一起喝水，建立健康黑暗棋</div>
+                    </div>
+                    <button class="challenge-btn">开始</button>
+                </div>
+                <div class="challenge-item">
+                    <div class="challenge-icon">💌</div>
+                    <div class="challenge-info">
+                        <div class="challenge-title">水滴便签</div>
+                        <div class="challenge-desc">每次喝水可以留言给对方，分享当下心情</div>
+                    </div>
+                    <button class="challenge-btn">开始</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+            <section class="tips-section">
+                <h2>健康小贴士</h2>
+                <div class="tip-card" id="daily-tip">
+                    <p>每天早上起床后喝一杯温水，可以帮助激活身体机能，促进新陈代谢！</p>
+                </div>
+                <div class="achievements">
+                    <h3>我的成就</h3>
+                    <div class="achievement-grid" id="achievements-container">
+                        <!-- Achievements will be added by JavaScript -->
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <button id="settings-btn">设置</button>
+            <div class="credits">水滴打卡 © 2025</div>
+        </footer>
+
+        <!-- Modals -->
+        <div class="modal" id="settings-modal">
+            <div class="modal-content">
+                <span class="close-btn">&times;</span>
+                <h2>设置</h2>
+                <div class="settings-tabs">
+                    <button class="settings-tab active" data-tab="personal-settings">个人设置</button>
+                    <button class="settings-tab" data-tab="couple-settings">情侣设置</button>
+                </div>
+                
+                <div class="settings-form" id="personal-settings">
+                    <div class="form-group">
+                        <label for="user1-name-input">我的名称</label>
+                        <input type="text" id="user1-name-input" placeholder="输入你的名字" maxlength="10">
+                    </div>
+                    <div class="form-group">
+                        <label for="daily-goal">每日饮水目标 (毫升)</label>
+                        <input type="number" id="daily-goal" min="500" max="5000" step="100" value="2000">
+                    </div>
+                    <div class="form-group">
+                        <label for="reminder-toggle">饮水提醒</label>
+                        <label class="switch">
+                            <input type="checkbox" id="reminder-toggle" checked>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <div class="form-group" id="reminder-interval-group">
+                        <label for="reminder-interval">提醒间隔 (分钟)</label>
+                        <input type="number" id="reminder-interval" min="30" max="240" step="10" value="60">
+                    </div>
+                    <div class="form-group">
+                        <label for="theme-select">主题颜色</label>
+                        <select id="theme-select">
+                            <option value="default">默认蓝色</option>
+                            <option value="pink">粉色</option>
+                            <option value="purple">紫色</option>
+                            <option value="green">绿色</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="settings-form" id="couple-settings" style="display:none">
+                    <div class="form-group">
+                        <label for="user2-name-input">伴侣名字</label>
+                        <input type="text" id="user2-name-input" placeholder="输入伴侣名字" maxlength="10">
+                    </div>
+                    <div class="form-group">
+                        <label for="sync-data">数据同步码</label>
+                        <div class="sync-code-container">
+                            <input type="text" id="sync-code" readonly>
+                            <button id="copy-sync-code" class="copy-btn">复制</button>
+                        </div>
+                        <p class="help-text">将此码发给伴侣，让他/她在下方输入即可关联账号</p>
+                    </div>
+                    <div class="form-group">
+                        <label for="partner-sync-code">输入伴侣同步码</label>
+                        <div class="sync-code-container">
+                            <input type="text" id="partner-sync-code" placeholder="输入伴侣给你的同步码">
+                            <button id="connect-partner" class="connect-btn">关联</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="couple-challenge-toggle">情侣挑战提醒</label>
+                        <label class="switch">
+                            <input type="checkbox" id="couple-challenge-toggle" checked>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <button id="save-settings" class="save-btn">保存设置</button>
+                <div id="settings-saved-message" class="settings-saved-message">设置已保存！</div>
+            </div>
+        </div>
+
+        <div class="modal" id="achievement-modal">
+            <div class="modal-content">
+                <span class="close-btn">&times;</span>
+                <div class="achievement-details">
+                    <img src="" alt="成就图标" id="achievement-icon">
+                    <h2 id="achievement-title">新成就解锁！</h2>
+                    <p id="achievement-description"></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="toast" id="reminder-toast">
+            <div class="toast-content">
+                <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="水杯">
+                <p>该喝水啦！保持水分对皮肤和健康都很重要哦～</p>
+            </div>
+            <button class="toast-close">&times;</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
