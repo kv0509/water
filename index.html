@@ -3,336 +3,704 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>情侣水滴打卡 - 每日饮水记录</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>玮恩喝水打卡系统</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&family=Mochiy+Pop+One&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/luxon@3.0.1/build/global/luxon.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0/dist/chartjs-adapter-luxon.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lottie-web@5.10.0/build/player/lottie.min.js"></script>
     <style>
-        /* 快速修复样式 */
-        body {
-            background-color: #f8f9fa;
+        :root {
+            --primary-color: #4fc3f7;
+            --primary-dark: #0093c4;
+            --primary-light: #e6f7ff;
+            --accent-color: #ff6b6b;
+            --text-color: #333;
+            --background-color: #e8edf2; /* 更深的背景色 */
+            --card-color: #ffffff;
+            --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.15); /* 更强的阴影 */
+            --success-color: #4caf50;
+            --warning-color: #ff9800;
+            --card-border: rgba(0, 147, 196, 0.15); /* 卡片边框颜色 */
+        }
+        
+        * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
-        .water-level-container {
-            background-color: rgba(255, 255, 255, 0.9) !important;
-            border: 2px solid #e6f7ff !important;
+        
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-family: 'Poppins', sans-serif;
+            line-height: 1.6;
         }
+        
+        .app-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 20px;
+        }
+        
+        .water-bottle-container {
+            flex: 0 0 auto;
+        }
+        
+        h1, h2, h3, .section-title {
+            font-family: 'Mochiy Pop One', sans-serif;
+            color: var(--primary-dark);
+            font-weight: 500;
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        h2 {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+        }
+        
+        h1 .subtitle {
+            display: block;
+            font-size: 1rem;
+            font-weight: 400;
+            color: var(--text-color);
+            opacity: 0.7;
+        }
+        
+        section {
+            background-color: var(--card-color);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--card-shadow);
+            border: 1px solid var(--card-border);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            background-color: var(--primary-color);
+        }
+        
+        .section-title {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            position: relative;
+            padding-left: 15px;
+            display: inline-block;
+        }
+        
+        .section-title::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 6px;
+            height: 20px;
+            background-color: var(--primary-color);
+            border-radius: 3px;
+        }
+        
+        /* 水瓶样式 */
+        .water-bottle {
+            position: relative;
+            width: 90px;
+            height: 180px;
+            margin: 10px auto;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 25px 25px 50px 50px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            border: 2px solid var(--primary-light);
+        }
+        
+        .water-bottle-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--primary-light);
+            border-radius: 12px;
+            padding: 15px;
+            width: 140px;
+            height: 200px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--card-border);
+        }
+        
         .water-level {
-            max-height: 95% !important;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 0%;
+            max-height: 90%;
+            background-color: var(--primary-color);
+            border-radius: 0 0 50px 50px;
+            transition: height 1s ease-out;
+            overflow: hidden;
+            z-index: 1;
         }
-        .user-btn {
-            cursor: pointer !important;
-            z-index: 100 !important;
+        
+        .water-level.animate {
+            animation: water-ripple 1s ease-out;
         }
-    </style>
-    <script>
-        // 内联JavaScript确保按钮可以点击
-        window.directSwitchUser = function(user) {
-            console.log('Direct switch to user:', user);
-            // 切换当前用户
-            window.currentUser = user;
-            
-            // 更新按钮状态
-            if (user === 'user1') {
-                document.getElementById('user1-btn').classList.add('active');
-                document.getElementById('user2-btn').classList.remove('active');
-            } else {
-                document.getElementById('user1-btn').classList.remove('active');
-                document.getElementById('user2-btn').classList.add('active');
+        
+        @keyframes water-ripple {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .water-waves {
+            position: absolute;
+            top: -10px;
+            left: 0;
+            width: 200%;
+            height: 20px;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 350 20"><path d="M0,10 Q43.75,0 87.5,10 T175,10 T262.5,10 T350,10 V20 H0 Z" fill="%23ffffff" opacity="0.3"/></svg>') repeat-x;
+            animation: wave 3s linear infinite;
+        }
+        
+        @keyframes wave {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-175px); }
+        }
+        
+        .water-bottle-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200"><path d="M25,0 L75,0 L75,35 Q100,50 100,85 L100,165 Q100,200 65,200 L35,200 Q0,200 0,165 L0,85 Q0,50 25,35 Z" fill="none" stroke="%2366b3ff" stroke-width="2" /></svg>') no-repeat;
+            background-size: 100% 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+        
+        /* 水量统计 */
+        .water-stats {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            align-items: center;
+            text-align: center;
+            background-color: var(--primary-light);
+            border-radius: 12px;
+            padding: 15px;
+            flex: 1;
+            min-width: 200px;
+            height: 200px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--card-border);
+        }
+        
+        .stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 5px;
+            min-width: 80px;
+        }
+        
+        .stat-value {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            margin-bottom: 5px;
+        }
+        
+        .stat span:first-child {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--primary-dark);
+            line-height: 1.2;
+        }
+        
+        .unit {
+            font-size: 0.9rem;
+            margin-left: 2px;
+            color: var(--primary-dark);
+        }
+        
+        .label {
+            font-size: 0.9rem;
+            color: var(--text-color);
+            opacity: 0.7;
+            white-space: nowrap;
+        }
+        
+        /* 饮水按钮 */
+        .drink-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .drink-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 12px 20px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 3px 10px rgba(0, 147, 196, 0.2);
+        }
+        
+        .drink-btn:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 147, 196, 0.3);
+        }
+        
+        .drink-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 5px rgba(0, 147, 196, 0.2);
+        }
+        
+        .drink-btn img {
+            width: 22px;
+            height: 22px;
+            filter: brightness(1.1);
+        }
+        
+        /* 小时记录 */
+        .hour-chart-container {
+            height: 250px;
+            margin: 20px 0 15px 0;
+            padding: 15px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 10px;
+            border: 1px solid rgba(79, 195, 247, 0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* 成就系统 */
+        .achievements {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+            gap: 12px;
+            margin-top: 20px;
+        }
+        
+        .achievement {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 12px 8px;
+            border-radius: 12px;
+            background-color: var(--primary-light);
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(79, 195, 247, 0.1);
+        }
+        
+        .achievement.locked {
+            opacity: 0.5;
+            filter: grayscale(1);
+            background-color: rgba(240, 240, 240, 0.8);
+        }
+        
+        .achievement:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+        
+        .achievement-icon {
+            width: 45px;
+            height: 45px;
+            margin-bottom: 8px;
+            filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.1));
+        }
+        
+        .achievement-name {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--primary-dark);
+            line-height: 1.2;
+        }
+        
+        /* 设置模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            overflow: auto;
+        }
+        
+        .modal-content {
+            background-color: var(--card-color);
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 16px;
+            width: 80%;
+            max-width: 500px;
+            position: relative;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        
+        .save-btn {
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+        }
+        
+        /* 底部 */
+        footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        
+        .footer-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        #settings-btn {
+            background-color: transparent;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            border-radius: 8px;
+            padding: 8px 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        #settings-btn:hover {
+            background-color: var(--primary-light);
+        }
+        
+        .danger-btn {
+            background-color: transparent;
+            border: 1px solid var(--accent-color);
+            color: var(--accent-color);
+            border-radius: 8px;
+            padding: 8px 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .danger-btn:hover {
+            background-color: rgba(255, 107, 107, 0.1);
+        }
+        
+        .credits {
+            font-size: 0.9rem;
+            color: var(--text-color);
+            opacity: 0.7;
+        }
+        
+        /* 提醒吐司 */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: var(--card-color);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            max-width: 300px;
+            transform: translateY(150%);
+            transition: transform 0.5s ease;
+            z-index: 1000;
+        }
+        
+        .toast.show {
+            transform: translateY(0);
+        }
+        
+        .toast-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .toast-content img {
+            width: 30px;
+            height: 30px;
+        }
+        
+        .toast-close {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin-left: 10px;
+            color: var(--text-color);
+            opacity: 0.7;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .app-container {
+                padding: 15px;
             }
             
-            // 刷新页面
-            setTimeout(function() {
-                location.reload();
-            }, 100);
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            .header-content {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .water-stats {
+                height: auto;
+                min-height: 120px;
+                width: 100%;
+                flex-direction: row;
+            }
+            
+            .water-bottle-container {
+                width: 100%;
+                height: 180px;
+            }
+            
+            .drink-buttons {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
-    </script>
+        
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1.6rem;
+            }
+            
+            .drink-buttons {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="app-container">
         <header>
-            <h1>情侣水滴打卡 <span class="subtitle">每日饮水好习惯</span></h1>
+            <h1>黄玮恩喝水打卡 <span class="subtitle">不喝水看我抽死你</span></h1>
             
-            <div class="user-switch">
-                <button type="button" id="user1-btn" class="user-btn active" onclick="directSwitchUser('user1')">我的打卡</button>
-                <button type="button" id="user2-btn" class="user-btn" onclick="directSwitchUser('user2')">伴侣打卡</button>
-            </div>
-            
-            <div class="water-bottles-container">
-                <div class="water-bottle-wrapper">
-                    <div class="water-level-container" id="user1-bottle">
-                        <div class="water-level" id="water-level-user1">
+            <div class="header-content">
+                <div class="water-bottle-container">
+                    <div class="water-bottle">
+                        <div id="water-level" class="water-level">
                             <div class="water-waves"></div>
                         </div>
                         <div class="water-bottle-overlay"></div>
                     </div>
-                    <div class="user-name" id="user1-name">我</div>
                 </div>
                 
-                <div class="love-connector">
-                    <div id="love-animation-container"></div>
-                </div>
-                
-                <div class="water-bottle-wrapper">
-                    <div class="water-level-container" id="user2-bottle">
-                        <div class="water-level" id="water-level-user2">
-                            <div class="water-waves"></div>
+                <div class="water-stats">
+                    <div class="stat">
+                        <div class="stat-value">
+                            <span id="current-amount">0</span>
+                            <span class="unit">ml</span>
                         </div>
-                        <div class="water-bottle-overlay"></div>
+                        <span class="label">今日喝水量</span>
                     </div>
-                    <div class="user-name" id="user2-name">伴侣</div>
+                    <div class="stat">
+                        <div class="stat-value">
+                            <span id="goal-percent">0%</span>
+                        </div>
+                        <span class="label">完成目标</span>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">
+                            <span id="streak-days">0</span>
+                            <span class="unit">天</span>
+                        </div>
+                        <span class="label">连续打卡</span>
+                    </div>
                 </div>
             </div>
         </header>
 
         <main>
             <section class="today-progress">
-    <h2 class="section-title">
-        <span id="current-user-title">我的饮水进度</span>
-        <div class="user-badge" id="current-user-badge"></div>
-    </h2>
-    <div class="progress-container">
-        <div class="progress-stats">
-            <div class="stat">
-                <span id="current-amount">0</span>
-                <span class="unit">毫升</span>
-                <span class="label">今日总量</span>
-            </div>
-            <div class="stat">
-                <span id="current-hour-amount">0</span>
-                <span class="unit">毫升</span>
-                <span class="label">本小时</span>
-            </div>
-            <div class="stat">
-                <span id="target-amount">2000</span>
-                <span class="unit">毫升</span>
-                <span class="label">每日目标</span>
-            </div>
-            <div class="stat">
-                <span id="percentage">0%</span>
-                <span class="label">完成度</span>
-            </div>
-        </div>
-    </div>
-    <div class="couple-status">
-        <div class="couple-message" id="couple-message">
-            <div class="message-bubble">还没有收到伴侣的鼓励消息～</div>
-        </div>
-        <button id="send-encouragement" class="encouragement-btn">发送鼓励 ❤️</button>
-    </div>
-    <!-- 动画互动容器 -->
-    <div id="drink-animation-container"></div>
-</section>
-
-            <section class="add-water">
-                <h2>记录饮水</h2>
-                <div class="water-options">
-                    <button class="water-option" data-amount="100">
+                <h2 class="section-title">今日饮水记录</h2>
+                
+                <div class="drink-buttons">
+                    <button class="drink-btn" onclick="addWater(100)">
                         <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="小杯">
-                        <span>小杯</span>
-                        <span class="amount">100ml</span>
+                        100ml
                     </button>
-                    <button class="water-option" data-amount="200">
+                    <button class="drink-btn" onclick="addWater(200)">
                         <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="中杯">
-                        <span>中杯</span>
-                        <span class="amount">200ml</span>
+                        200ml
                     </button>
-                    <button class="water-option" data-amount="350">
+                    <button class="drink-btn" onclick="addWater(350)">
                         <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="大杯">
-                        <span>大杯</span>
-                        <span class="amount">350ml</span>
+                        350ml
                     </button>
-                    <button class="water-option" data-amount="500">
+                    <button class="drink-btn" onclick="addWater(500)">
                         <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="水瓶">
-                        <span>水瓶</span>
-                        <span class="amount">500ml</span>
+                        500ml
+                    </button>
+                    <button class="drink-btn" onclick="showCustomAmountModal()">
+                        <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="自定义">
+                        自定义
                     </button>
                 </div>
-                <div class="custom-amount">
-                    <input type="number" id="custom-amount" min="10" max="1000" step="10" placeholder="自定义毫升">
-                    <button id="add-custom">添加</button>
+                
+                <div id="hour-chart-container" class="hour-chart-container">
+                    <canvas id="hourChart"></canvas>
                 </div>
             </section>
-
-            <section class="stats-section">
-    <h2 class="section-title">
-        <span id="stats-title">饮水数据</span>
-        <div class="tab-switch">
-            <button id="tab-charts" class="tab-btn active">图表</button>
-            <button id="tab-couple" class="tab-btn">情侣排行</button>
-        </div>
-    </h2>
-    
-    <div id="charts-tab" class="tab-content active">
-        <div class="chart-container">
-            <canvas id="weekly-chart"></canvas>
-        </div>
-        <div class="chart-container">
-            <canvas id="hourly-chart"></canvas>
-        </div>
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value" id="streak-count">0</div>
-                <div class="stat-label">连续打卡天数</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="total-days">0</div>
-                <div class="stat-label">总打卡天数</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="avg-completion">0%</div>
-                <div class="stat-label">平均完成度</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="best-day">-</div>
-                <div class="stat-label">最佳饮水日</div>
-            </div>
-        </div>
-    </div>
-    
-    <div id="couple-tab" class="tab-content">
-        <div class="couple-competition">
-            <h3>本周情侣比拼</h3>
-            <div class="competition-bar-container">
-                <div class="user-label">
-                    <span id="user1-name-comp">我</span>
-                    <span id="user1-amount-comp">0ml</span>
+            
+            <section class="weekly-progress">
+                <h2 class="section-title">本周饮水趋势</h2>
+                <div id="weekly-chart-container" class="hour-chart-container">
+                    <canvas id="weeklyChart"></canvas>
                 </div>
-                <div class="competition-bar">
-                    <div class="user1-bar" id="user1-progress-bar"></div>
-                    <div class="user2-bar" id="user2-progress-bar"></div>
+            </section>
+            
+            <section class="achievements-section">
+                <h2 class="section-title">成就系统</h2>
+                <div class="achievements" id="achievements-container">
+                    <!-- 成就将通过JavaScript动态生成 -->
                 </div>
-                <div class="user-label">
-                    <span id="user2-amount-comp">0ml</span>
-                    <span id="user2-name-comp">伴侣</span>
-                </div>
-            </div>
-            <div class="competition-result" id="competition-result">
-                本周比赛进行中...
-            </div>
-        </div>
-        
-        <div class="couple-challenges">
-            <h3>情侣挑战</h3>
-            <div class="challenge-list" id="challenge-list">
-                <div class="challenge-item">
-                    <div class="challenge-icon">🎉</div>
-                    <div class="challenge-info">
-                        <div class="challenge-title">一起喝水挑战</div>
-                        <div class="challenge-desc">同一小时内一起喝水，建立健康黑暗棋</div>
-                    </div>
-                    <button class="challenge-btn">开始</button>
-                </div>
-                <div class="challenge-item">
-                    <div class="challenge-icon">💌</div>
-                    <div class="challenge-info">
-                        <div class="challenge-title">水滴便签</div>
-                        <div class="challenge-desc">每次喝水可以留言给对方，分享当下心情</div>
-                    </div>
-                    <button class="challenge-btn">开始</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
+            </section>
+            
             <section class="tips-section">
-                <h2>健康小贴士</h2>
+                <h2 class="section-title">男朋友的小贴士</h2>
                 <div class="tip-card" id="daily-tip">
-                    <p>每天早上起床后喝一杯温水，可以帮助激活身体机能，促进新陈代谢！</p>
-                </div>
-                <div class="achievements">
-                    <h3>我的成就</h3>
-                    <div class="achievement-grid" id="achievements-container">
-                        <!-- Achievements will be added by JavaScript -->
-                    </div>
+                    <p>每天喝足够的水有助于保持皮肤水分，增强新陈代谢，提高身体免疫力！</p>
                 </div>
             </section>
         </main>
 
         <footer>
-            <button id="settings-btn">设置</button>
-            <div class="credits">水滴打卡 © 2025</div>
+            <div class="footer-buttons">
+                <button id="settings-btn">设置</button>
+                <button id="clear-data-btn" class="danger-btn">清除数据</button>
+            </div>
+            <div class="credits">黄玮恩喝水打卡 © 2025</div>
         </footer>
 
-        <!-- Modals -->
+        <!-- 模态框 -->
         <div class="modal" id="settings-modal">
             <div class="modal-content">
                 <span class="close-btn">&times;</span>
-                <h2>设置</h2>
-                <div class="settings-tabs">
-                    <button class="settings-tab active" data-tab="personal-settings">个人设置</button>
-                    <button class="settings-tab" data-tab="couple-settings">情侣设置</button>
+                <h2 class="section-title">设置</h2>
+                
+                <div class="form-group">
+                    <label for="daily-goal">每日目标 (毫升)</label>
+                    <input type="number" id="daily-goal" min="500" max="5000" step="100" value="1500">
                 </div>
                 
-                <div class="settings-form" id="personal-settings">
-                    <div class="form-group">
-                        <label for="user1-name-input">我的名称</label>
-                        <input type="text" id="user1-name-input" placeholder="输入你的名字" maxlength="10">
-                    </div>
-                    <div class="form-group">
-                        <label for="daily-goal">每日饮水目标 (毫升)</label>
-                        <input type="number" id="daily-goal" min="500" max="5000" step="100" value="2000">
-                    </div>
-                    <div class="form-group">
-                        <label for="reminder-toggle">饮水提醒</label>
-                        <label class="switch">
-                            <input type="checkbox" id="reminder-toggle" checked>
-                            <span class="slider round"></span>
-                        </label>
-                    </div>
-                    <div class="form-group" id="reminder-interval-group">
-                        <label for="reminder-interval">提醒间隔 (分钟)</label>
-                        <input type="number" id="reminder-interval" min="30" max="240" step="10" value="60">
-                    </div>
-                    <div class="form-group">
-                        <label for="theme-select">主题颜色</label>
-                        <select id="theme-select">
-                            <option value="default">默认蓝色</option>
-                            <option value="pink">粉色</option>
-                            <option value="purple">紫色</option>
-                            <option value="green">绿色</option>
-                        </select>
-                    </div>
+                <div class="form-group">
+                    <label for="reminder-toggle">饮水提醒</label>
+                    <input type="checkbox" id="reminder-toggle" checked>
                 </div>
                 
-                <div class="settings-form" id="couple-settings" style="display:none">
-                    <div class="form-group">
-                        <label for="user2-name-input">伴侣名字</label>
-                        <input type="text" id="user2-name-input" placeholder="输入伴侣名字" maxlength="10">
-                    </div>
-                    <div class="form-group">
-                        <label for="sync-data">数据同步码</label>
-                        <div class="sync-code-container">
-                            <input type="text" id="sync-code" readonly>
-                            <button id="copy-sync-code" class="copy-btn">复制</button>
-                        </div>
-                        <p class="help-text">将此码发给伴侣，让他/她在下方输入即可关联账号</p>
-                    </div>
-                    <div class="form-group">
-                        <label for="partner-sync-code">输入伴侣同步码</label>
-                        <div class="sync-code-container">
-                            <input type="text" id="partner-sync-code" placeholder="输入伴侣给你的同步码">
-                            <button id="connect-partner" class="connect-btn">关联</button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="couple-challenge-toggle">情侣挑战提醒</label>
-                        <label class="switch">
-                            <input type="checkbox" id="couple-challenge-toggle" checked>
-                            <span class="slider round"></span>
-                        </label>
-                    </div>
+                <div class="form-group" id="reminder-interval-group">
+                    <label for="reminder-interval">提醒间隔 (分钟)</label>
+                    <input type="number" id="reminder-interval" min="30" max="240" step="10" value="60">
+                </div>
+                
+                <div class="form-group">
+                    <label for="theme-select">主题颜色</label>
+                    <select id="theme-select">
+                        <option value="default">默认蓝色</option>
+                        <option value="pink">粉色</option>
+                        <option value="purple">紫色</option>
+                        <option value="green">绿色</option>
+                    </select>
                 </div>
                 
                 <button id="save-settings" class="save-btn">保存设置</button>
-                <div id="settings-saved-message" class="settings-saved-message">设置已保存！</div>
+            </div>
+        </div>
+
+        <div class="modal" id="custom-amount-modal">
+            <div class="modal-content">
+                <span class="close-btn">&times;</span>
+                <h2 class="section-title">自定义喝水量</h2>
+                
+                <div class="form-group">
+                    <label for="custom-amount">喝水量 (毫升)</label>
+                    <input type="number" id="custom-amount" min="10" max="2000" step="10" value="250">
+                </div>
+                
+                <button id="add-custom-amount" class="save-btn">添加记录</button>
             </div>
         </div>
 
@@ -350,7 +718,7 @@
         <div class="toast" id="reminder-toast">
             <div class="toast-content">
                 <img src="https://cdn-icons-png.flaticon.com/512/824/824239.png" alt="水杯">
-                <p>该喝水啦！保持水分对皮肤和健康都很重要哦～</p>
+                <p>玮恩，该喝水啦！保持水分对皮肤和健康都很重要哦～</p>
             </div>
             <button class="toast-close">&times;</button>
         </div>
