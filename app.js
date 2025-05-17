@@ -1,442 +1,455 @@
-// 情侣水滴打卡 app.js
-// 本地存储饮水数据，支持情侣互动、成就、提醒、排行榜
+// 玮恩喝水打卡系统 app.js
+// 本地存储饮水数据，支持成就、提醒、图表统计
 
-const DEFAULT_DAILY_GOAL = 2000;
-const DEFAULT_REMINDER_INTERVAL = 60; // 分钟
-
-// 生成唯一用户ID作为同步码
-function generateUserId() {
-    return 'user_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-}
+const DEFAULT_DAILY_GOAL = 1500; // 默认每日目标1500ml
+const DEFAULT_REMINDER_INTERVAL = 60; // 默认提醒间隔（分钟）
 
 // 初始化数据存储
 let waterData = JSON.parse(localStorage.getItem('waterData') || '{}');
 let settings = JSON.parse(localStorage.getItem('waterSettings') || '{}');
-let coupleData = JSON.parse(localStorage.getItem('coupleData') || '{}');
-
-// 当前激活用户（默认为用户自己）
-let currentUser = 'user1';
 
 // 初始化用户数据结构
-if (!waterData.user1) {
+if (!waterData.history) {
+    // 创建初始数据结构
     waterData = {
-        user1: {
-            history: {},
-            streak: 0,
-            bestDay: null,
-            achievements: []
-        },
-        user2: {
-            history: {},
-            streak: 0,
-            bestDay: null,
-            achievements: []
-        }
+        history: {},
+        streak: 0,
+        bestDay: null,
+        achievements: []
     };
     
-    // 添加模拟数据，便于测试
-    const currentDate = today;
-    const yesterday = luxon.DateTime.local().minus({days: 1}).toFormat('yyyy-MM-dd');
-    
-    // 用户自己的模拟数据
-    waterData.user1.history[currentDate] = {};
-    waterData.user1.history[currentDate]['09'] = [200, 150];
-    waterData.user1.history[currentDate]['12'] = [350];
-    waterData.user1.history[currentDate]['15'] = [200, 100];
-    waterData.user1.history[yesterday] = {};
-    waterData.user1.history[yesterday]['10'] = [200, 300];
-    waterData.user1.history[yesterday]['14'] = [250, 150];
-    
-    // 伴侣的模拟数据
-    waterData.user2.history[currentDate] = {};
-    waterData.user2.history[currentDate]['08'] = [250];
-    waterData.user2.history[currentDate]['13'] = [300, 150];
-    waterData.user2.history[yesterday] = {};
-    waterData.user2.history[yesterday]['09'] = [200];
-    waterData.user2.history[yesterday]['16'] = [350, 200];
-    
-    // 添加成就
-    waterData.user1.achievements = ['first', 'streak3'];
-    waterData.user2.achievements = ['first'];
-    
-    // 保存模拟数据
+    // 保存数据
     localStorage.setItem('waterData', JSON.stringify(waterData));
 }
 
 // 初始化设置
-if (!settings.user1) {
+if (!settings.dailyGoal) {
     settings = {
-        user1: {
-            name: '我',
-            dailyGoal: DEFAULT_DAILY_GOAL,
-            reminder: true,
-            reminderInterval: DEFAULT_REMINDER_INTERVAL
-        },
-        user2: {
-            name: '伴侣',
-            dailyGoal: DEFAULT_DAILY_GOAL,
-            reminder: true,
-            reminderInterval: DEFAULT_REMINDER_INTERVAL
-        },
-        theme: 'default',
-        userId: generateUserId(),
-        partnerId: ''
-    };
-}
-
-// 初始化情侣数据
-if (!coupleData.messages) {
-    coupleData = {
-        messages: [
-            {
-                sender: 'user2',
-                receiver: 'user1',
-                message: '亲爱的，你今天喝水了吗？记得多喝水哦～',
-                timestamp: luxon.DateTime.local().minus({hours: 2}).toISO()
-            },
-            {
-                sender: 'user1',
-                receiver: 'user2',
-                message: '我们一起变得更健康吧！爱你哦❤️',
-                timestamp: luxon.DateTime.local().minus({hours: 1}).toISO()
-            }
-        ],
-        challenges: [
-            {
-                id: 'drink-together',
-                name: '一起喝水挑战',
-                status: 'active',
-                progress: 2,
-                goal: 5
-            }
-        ],
-        weeklyCompetition: {
-            user1: 1200,
-            user2: 900,
-            lastReset: luxon.DateTime.local().minus({days: 3}).toFormat('yyyy-MM-dd')
-        }
+        name: '玮恩',
+        dailyGoal: DEFAULT_DAILY_GOAL,
+        reminder: true,
+        reminderInterval: DEFAULT_REMINDER_INTERVAL,
+        theme: 'default'
     };
     
-    // 保存模拟数据
-    localStorage.setItem('coupleData', JSON.stringify(coupleData));
+    // 保存设置
+    localStorage.setItem('waterSettings', JSON.stringify(settings));
 }
 
 const today = luxon.DateTime.local().toFormat('yyyy-MM-dd');
 const currentHour = luxon.DateTime.local().toFormat('HH');
 
 // ----------------- DOM 元素 -----------------
-// 水瓶和用户切换
-const user1BtnEl = document.getElementById('user1-btn');
-const user2BtnEl = document.getElementById('user2-btn');
-const waterLevelUser1El = document.getElementById('water-level-user1');
-const waterLevelUser2El = document.getElementById('water-level-user2');
-const user1NameEl = document.getElementById('user1-name');
-const user2NameEl = document.getElementById('user2-name');
-const currentUserTitleEl = document.getElementById('current-user-title');
+// 水瓶和统计
+let waterLevelEl;
+let currentAmountEl;
+let goalPercentEl;
+let streakDaysEl;
 
-// 饮水数据和进度
-const currentAmountEl = document.getElementById('current-amount');
-const targetAmountEl = document.getElementById('target-amount');
-const percentageEl = document.getElementById('percentage');
-const currentHourAmountEl = document.getElementById('current-hour-amount');
+// 图表
+let hourChartEl;
+let weeklyChartEl;
+let hourChart;
+let weeklyChart;
 
-// 统计和图表
-const streakCountEl = document.getElementById('streak-count');
-const totalDaysEl = document.getElementById('total-days');
-const avgCompletionEl = document.getElementById('avg-completion');
-const bestDayEl = document.getElementById('best-day');
+// 成就
+let achievementsContainerEl;
 
-// 情侣互动
-const coupleMessageEl = document.getElementById('couple-message');
-const sendEncouragementBtn = document.getElementById('send-encouragement');
+// 模态框
+let settingsModalEl;
+let customAmountModalEl;
+let achievementModalEl;
 
-// 排行榜和挑战
-const tabChartsBtn = document.getElementById('tab-charts');
-const tabCoupleBtn = document.getElementById('tab-couple');
-const chartsTabEl = document.getElementById('charts-tab');
-const coupleTabEl = document.getElementById('couple-tab');
-const user1ProgressBarEl = document.getElementById('user1-progress-bar');
-const user2ProgressBarEl = document.getElementById('user2-progress-bar');
-const user1AmountCompEl = document.getElementById('user1-amount-comp');
-const user2AmountCompEl = document.getElementById('user2-amount-comp');
-const user1NameCompEl = document.getElementById('user1-name-comp');
-const user2NameCompEl = document.getElementById('user2-name-comp');
-const competitionResultEl = document.getElementById('competition-result');
+// 提醒
+let reminderToastEl;
 
-// 成就和设置
-const achievementsContainer = document.getElementById('achievements-container');
-const achievementModal = document.getElementById('achievement-modal');
-const achievementIcon = document.getElementById('achievement-icon');
-const achievementTitle = document.getElementById('achievement-title');
-const achievementDesc = document.getElementById('achievement-description');
-
-// 设置相关
-const settingsBtn = document.getElementById('settings-btn');
-const settingsModal = document.getElementById('settings-modal');
-const settingsTabs = document.querySelectorAll('.settings-tab');
-const personalSettingsEl = document.getElementById('personal-settings');
-const coupleSettingsEl = document.getElementById('couple-settings');
-const user1NameInputEl = document.getElementById('user1-name-input');
-const user2NameInputEl = document.getElementById('user2-name-input');
-const dailyGoalInput = document.getElementById('daily-goal');
-const reminderToggle = document.getElementById('reminder-toggle');
-const reminderIntervalInput = document.getElementById('reminder-interval');
-const themeSelect = document.getElementById('theme-select');
-const syncCodeEl = document.getElementById('sync-code');
-const copySyncCodeBtn = document.getElementById('copy-sync-code');
-const partnerSyncCodeEl = document.getElementById('partner-sync-code');
-const connectPartnerBtn = document.getElementById('connect-partner');
-const coupleToggle = document.getElementById('couple-challenge-toggle');
-const saveSettingsBtn = document.getElementById('save-settings');
-const settingsSavedMsgEl = document.getElementById('settings-saved-message');
-
-// 其他元素
-const closeBtns = document.querySelectorAll('.close-btn');
-const reminderToast = document.getElementById('reminder-toast');
-const toastCloseBtn = document.querySelector('.toast-close');
-const customAmountInput = document.getElementById('custom-amount');
-const addCustomBtn = document.getElementById('add-custom');
-const waterOptionBtns = document.querySelectorAll('.water-option');
-
-// ----------------- 饮水数据处理 -----------------
-function getTodayTotal() {
-    // 获取当前用户的数据
-    const userData = waterData[currentUser] || waterData;
-    if (!userData.history || !userData.history[today]) return 0;
+// ----------------- 初始化 -----------------
+function init() {
+    console.log('初始化应用...');
     
-    const hourObj = userData.history[today] || {};
-    let sum = 0;
-    Object.values(hourObj).forEach(arr => {
-        sum += arr.reduce((a, b) => a + b, 0);
-    });
-    return sum;
-}
-
-function getHourTotal(hour) {
-    // 获取当前用户的数据
-    const userData = waterData[currentUser] || waterData;
-    if (!userData.history || !userData.history[today]) return 0;
+    // 初始化DOM元素
+    initDomElements();
     
-    const hourObj = userData.history[today] || {};
-    return (hourObj[hour] || []).reduce((a, b) => a + b, 0);
-}
-
-// 获取当前用户的水滴数据
-function getCurrentUserData() {
-    return waterData[currentUser] || waterData; // 兼容旧数据
-}
-
-// 获取当前用户的设置
-function getCurrentUserSettings() {
-    return settings[currentUser] || settings; // 兼容旧设置
-}
-
-// 更新所有UI元素
-function updateUI() {
-    updateProgressUI();
-    updateUserNames();
-    updateWaterBottles();
-    updateCoupleCompetition();
-}
-
-// 更新进度条和数据显示
-function updateProgressUI() {
-    const userSettings = getCurrentUserSettings();
-    const total = getTodayTotal();
-    const percent = Math.min(100, Math.round((total / userSettings.dailyGoal) * 100));
+    // 应用主题
+    applyTheme(settings.theme);
     
-    // 更新数据显示
-    currentAmountEl.textContent = total;
-    targetAmountEl.textContent = userSettings.dailyGoal;
-    percentageEl.textContent = percent + '%';
-    currentHourAmountEl.textContent = getHourTotal(currentHour);
+    // 更新UI
+    updateUI();
     
-    // 更新标题
-    currentUserTitleEl.textContent = currentUser === 'user1' ? 
-        `${settings.user1.name}的饮水进度` : 
-        `${settings.user2.name}的饮水进度`;
+    // 渲染图表
+    renderHourChart();
+    renderWeeklyChart();
     
-    // 更新水瓶高度
-    updateWaterBottles();
-}
-
-// 更新用户名称
-function updateUserNames() {
-    user1NameEl.textContent = settings.user1.name;
-    user2NameEl.textContent = settings.user2.name;
-    user1NameCompEl.textContent = settings.user1.name;
-    user2NameCompEl.textContent = settings.user2.name;
-}
-
-// 更新水瓶高度
-function updateWaterBottles() {
-    // 先获取元素，确保它们存在
-    waterLevelUser1El = document.getElementById('water-level-user1');
-    waterLevelUser2El = document.getElementById('water-level-user2');
+    // 显示成就
+    renderAchievements();
     
-    // 确保水瓶元素存在
-    if (!waterLevelUser1El || !waterLevelUser2El) {
-        console.error('Water bottle elements not found');
-        return;
+    // 显示每日提示
+    showDailyTip();
+    
+    // 绑定事件
+    bindEvents();
+    
+    // 设置提醒
+    if (settings.reminder) {
+        setupReminders();
     }
     
-    // 用户自己的水瓶
-    const user1Total = getTodayTotalForUser('user1');
-    const user1Percent = Math.min(95, Math.round((user1Total / settings.user1.dailyGoal) * 100)); // 最多只显示95%，避免溢出
-    waterLevelUser1El.style.height = user1Percent + '%';
-    
-    // 伴侣的水瓶
-    const user2Total = getTodayTotalForUser('user2');
-    const user2Percent = Math.min(95, Math.round((user2Total / settings.user2.dailyGoal) * 100)); // 最多只显示95%，避免溢出
-    waterLevelUser2El.style.height = user2Percent + '%';
-    
-    console.log('Water bottles updated:', user1Percent + '%', user2Percent + '%', waterLevelUser1El, waterLevelUser2El);
+    console.log('应用初始化完成');
 }
 
-// 获取指定用户的今日总量
-function getTodayTotalForUser(user) {
-    const userData = waterData[user] || waterData;
-    if (!userData.history || !userData.history[today]) return 0;
+// 初始化DOM元素
+function initDomElements() {
+    // 水瓶和统计
+    waterLevelEl = document.getElementById('water-level');
+    currentAmountEl = document.getElementById('current-amount');
+    goalPercentEl = document.getElementById('goal-percent');
+    streakDaysEl = document.getElementById('streak-days');
     
-    const hourObj = userData.history[today] || {};
-    let sum = 0;
-    Object.values(hourObj).forEach(arr => {
-        sum += arr.reduce((a, b) => a + b, 0);
+    // 图表
+    hourChartEl = document.getElementById('hourChart');
+    weeklyChartEl = document.getElementById('weeklyChart');
+    
+    // 成就
+    achievementsContainerEl = document.getElementById('achievements-container');
+    
+    // 模态框
+    settingsModalEl = document.getElementById('settings-modal');
+    customAmountModalEl = document.getElementById('custom-amount-modal');
+    achievementModalEl = document.getElementById('achievement-modal');
+    
+    // 提醒
+    reminderToastEl = document.getElementById('reminder-toast');
+    
+    console.log('DOM元素初始化完成');
+}
+
+// 绑定所有事件
+function bindEvents() {
+    // 设置按钮
+    const settingsBtn = document.getElementById('settings-btn');
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+            openSettingsModal();
+        });
+    }
+    
+    // 清除数据按钮
+    const clearDataBtn = document.getElementById('clear-data-btn');
+    if (clearDataBtn) {
+        clearDataBtn.addEventListener('click', () => {
+            if (confirm('确定要清除所有喝水记录吗？这个操作无法撤销。')) {
+                clearAllData();
+            }
+        });
+    }
+    
+    // 关闭按钮
+    const closeButtons = document.querySelectorAll('.close-btn');
+    closeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            closeAllModals();
+        });
     });
-    return sum;
+    
+    // 保存设置按钮
+    const saveSettingsBtn = document.getElementById('save-settings');
+    if (saveSettingsBtn) {
+        saveSettingsBtn.addEventListener('click', saveSettings);
+    }
+    
+    // 自定义喝水量按钮
+    const addCustomAmountBtn = document.getElementById('add-custom-amount');
+    if (addCustomAmountBtn) {
+        addCustomAmountBtn.addEventListener('click', () => {
+            const amount = parseInt(document.getElementById('custom-amount').value);
+            if (amount && amount > 0) {
+                addWater(amount);
+                closeAllModals();
+            }
+        });
+    }
+    
+    // 绑定所有喝水量按钮
+    const drinkButtons = document.querySelectorAll('.drink-btn');
+    drinkButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            // 防止自定义按钮触发添加水量
+            if (btn.textContent.includes('自定义')) {
+                showCustomAmountModal();
+            } else {
+                // 获取按钮上的数量
+                const text = btn.textContent.trim();
+                const match = text.match(/(\d+)ml/);
+                if (match && match[1]) {
+                    const amount = parseInt(match[1]);
+                    addWater(amount);
+                }
+            }
+        });
+    });
+    
+    // 提醒关闭按钮
+    const toastCloseBtn = document.querySelector('.toast-close');
+    if (toastCloseBtn) {
+        toastCloseBtn.addEventListener('click', () => {
+            hideToast();
+        });
+    }
+    
+    console.log('事件绑定完成');
+}
+
+// ----------------- 饮水数据处理 -----------------
+// 获取今日总饮水量
+function getTodayTotal() {
+    if (!waterData.history[today]) {
+        return 0;
+    }
+    
+    let total = 0;
+    const todayData = waterData.history[today];
+    
+    Object.keys(todayData).forEach(hour => {
+        todayData[hour].forEach(amount => {
+            total += amount;
+        });
+    });
+    
+    return total;
+}
+
+// 获取指定小时的饮水量
+function getHourTotal(hour) {
+    if (!waterData.history[today] || !waterData.history[today][hour]) {
+        return 0;
+    }
+    
+    return waterData.history[today][hour].reduce((sum, amount) => sum + amount, 0);
 }
 
 // 添加水滴记录
 function addWater(amount) {
-    // 初始化当前用户的数据结构
-    if (!waterData[currentUser]) {
-        waterData[currentUser] = { history: {} };
-    }
-    if (!waterData[currentUser].history) {
-        waterData[currentUser].history = {};
-    }
-    if (!waterData[currentUser].history[today]) {
-        waterData[currentUser].history[today] = {};
-    }
-    if (!waterData[currentUser].history[today][currentHour]) {
-        waterData[currentUser].history[today][currentHour] = [];
+    console.log(`添加饮水记录: ${amount}ml`);
+    
+    // 确保数据结构存在
+    if (!waterData.history[today]) {
+        waterData.history[today] = {};
     }
     
-    // 添加水滴记录
-    waterData[currentUser].history[today][currentHour].push(amount);
-    
-    // 更新情侣比赛数据
-    if (currentUser === 'user1') {
-        coupleData.weeklyCompetition.user1 += amount;
-    } else {
-        coupleData.weeklyCompetition.user2 += amount;
+    if (!waterData.history[today][currentHour]) {
+        waterData.history[today][currentHour] = [];
     }
+    
+    // 添加记录
+    waterData.history[today][currentHour].push(amount);
+    
+    // 更新连续打卡天数
+    updateStreak();
+    
+    // 检查成就
+    checkAchievements();
     
     // 保存数据
     localStorage.setItem('waterData', JSON.stringify(waterData));
-    localStorage.setItem('coupleData', JSON.stringify(coupleData));
     
     // 更新UI
     updateUI();
-    updateStats();
+    
+    // 更新图表
     renderHourChart();
     renderWeeklyChart();
-    updateCoupleCompetition();
-    checkAchievements();
     
-    // 动画效果
-    showDrinkAnimation(amount);
-    showEmojiFeedback(amount);
+    // 显示动画效果
+    showDrinkAnimation();
 }
 
-// ----------------- 统计与成就 -----------------
+// 更新连续打卡天数
+function updateStreak() {
+    const yesterday = luxon.DateTime.local().minus({days: 1}).toFormat('yyyy-MM-dd');
+    
+    // 检查昨天是否有记录
+    if (waterData.history[yesterday]) {
+        waterData.streak = (waterData.streak || 0) + 1;
+    } else {
+        // 如果今天是第一次记录，重置为1
+        if (!waterData.streak || waterData.streak === 0) {
+            waterData.streak = 1;
+        }
+    }
+    
+    // 更新最佳天数
+    if (!waterData.bestDay || getTodayTotal() > waterData.bestDay.amount) {
+        waterData.bestDay = {
+            date: today,
+            amount: getTodayTotal()
+        };
+    }
+}
+
+// ----------------- UI更新 -----------------
+// 更新所有UI元素
+function updateUI() {
+    updateWaterBottle();
+    updateStats();
+}
+
+// 更新水瓶高度
+function updateWaterBottle() {
+    if (!waterLevelEl) return;
+    
+    const total = getTodayTotal();
+    
+    // 调整水位计算逻辑，限制最高水位到瓶口附近
+    // 当达到目标的70%时已经到达瓶颈附近，之后增长缓慢
+    let percent;
+    const ratio = total / settings.dailyGoal;
+    
+    if (ratio <= 0.7) {
+        // 正常增长区间，0-70%的目标对应水位从0%到65%
+        percent = Math.round(ratio * (65/0.7));
+    } else {
+        // 瓶颈区域，70%-100%的目标对应水位从65%到70%
+        percent = 65 + Math.round((ratio - 0.7) * (5/0.3));
+    }
+    
+    // 确保水位不超过70%
+    percent = Math.min(70, percent);
+    
+    waterLevelEl.style.height = percent + '%';
+    console.log(`水瓶高度更新: ${percent}%，总量: ${total}ml，目标比例: ${ratio}`);
+}
+
+// 更新统计数据
 function updateStats() {
-    const days = Object.keys(waterData.history);
-    let streak = 0, maxStreak = 0, lastDay = null, totalDays = 0, sumPercent = 0, bestDay = null, bestAmount = 0;
-    days.sort();
-    days.forEach(date => {
-        const total = waterData.history[date].reduce((a, b) => a + b, 0);
-        const percent = Math.min(100, Math.round((total / settings.dailyGoal) * 100));
-        sumPercent += percent;
-        if (percent >= 100) {
-            if (!lastDay || luxon.DateTime.fromISO(date).diff(luxon.DateTime.fromISO(lastDay), 'days').days === 1) {
-                streak++;
-            } else {
-                streak = 1;
-            }
-            if (streak > maxStreak) maxStreak = streak;
-            lastDay = date;
-        }
-        if (percent >= 100) totalDays++;
-        if (total > bestAmount) {
-            bestAmount = total;
-            bestDay = date;
-        }
-    });
-    streakCountEl.textContent = maxStreak;
-    totalDaysEl.textContent = totalDays;
-    avgCompletionEl.textContent = days.length ? Math.round(sumPercent / days.length) + '%' : '0%';
-    bestDayEl.textContent = bestDay ? bestDay : '-';
+    const total = getTodayTotal();
+    const percent = Math.min(100, Math.round((total / settings.dailyGoal) * 100));
+    
+    if (currentAmountEl) {
+        currentAmountEl.textContent = total;
+    }
+    
+    if (goalPercentEl) {
+        goalPercentEl.textContent = percent + '%';
+    }
+    
+    if (streakDaysEl) {
+        streakDaysEl.textContent = waterData.streak || 0;
+    }
 }
 
-// ----------------- Chart.js 饮水图表 -----------------
-let weeklyChart;
-function renderChart() {
-    const ctx = document.getElementById('weekly-chart').getContext('2d');
-    const last7days = Array.from({length: 7}, (_, i) => luxon.DateTime.local().minus({days: 6 - i}).toFormat('yyyy-MM-dd'));
-    const data = last7days.map(date => {
-        const hourObj = waterData.history[date] || {};
-        let sum = 0;
-        Object.values(hourObj).forEach(arr => { sum += arr.reduce((a, b) => a + b, 0); });
-        return sum;
-    });
-    if (weeklyChart) weeklyChart.destroy();
-    weeklyChart = new Chart(ctx, {
+// ----------------- 图表 -----------------
+// 渲染小时图表
+function renderHourChart() {
+    if (!hourChartEl) return;
+    
+    // 销毁旧图表
+    if (hourChart) {
+        hourChart.destroy();
+    }
+    
+    // 准备数据
+    const hours = [];
+    const amounts = [];
+    
+    // 获取今日所有小时数据
+    for (let i = 0; i < 24; i++) {
+        const hour = i.toString().padStart(2, '0');
+        hours.push(`${hour}:00`);
+        
+        if (waterData.history[today] && waterData.history[today][hour]) {
+            amounts.push(waterData.history[today][hour].reduce((sum, amount) => sum + amount, 0));
+        } else {
+            amounts.push(0);
+        }
+    }
+    
+    // 创建图表
+    hourChart = new Chart(hourChartEl, {
         type: 'bar',
         data: {
-            labels: last7days.map(d => d.substr(5)),
+            labels: hours,
             datasets: [{
-                label: '每日饮水量 (ml)',
-                data,
-                backgroundColor: data.map(v => v >= settings.dailyGoal ? 'var(--primary-color)' : 'var(--secondary-color)'),
-                borderRadius: 12
+                label: '小时饮水量 (ml)',
+                data: amounts,
+                backgroundColor: 'rgba(79, 195, 247, 0.6)',
+                borderColor: 'rgba(79, 195, 247, 1)',
+                borderWidth: 1
             }]
         },
         options: {
-            plugins: {
-                legend: { display: false }
-            },
+            responsive: true,
+            maintainAspectRatio: false,
             scales: {
                 y: {
                     beginAtZero: true,
-                    max: Math.max(settings.dailyGoal, ...data, 2000)
+                    title: {
+                        display: true,
+                        text: '饮水量 (ml)'
+                    }
                 }
             }
         }
     });
 }
-// 新增：今日小时分布图
-let hourChart;
-function renderHourChart() {
-    const ctx = document.getElementById('hourly-chart')?.getContext('2d');
-    if (!ctx) return;
-    const hours = Array.from({length: 24}, (_, i) => (i < 10 ? '0' : '') + i);
-    const data = hours.map(h => getHourTotal(h));
-    if (hourChart) hourChart.destroy();
-    hourChart = new Chart(ctx, {
-        type: 'bar',
+
+// 渲染周图表
+function renderWeeklyChart() {
+    if (!weeklyChartEl) return;
+    
+    // 销毁旧图表
+    if (weeklyChart) {
+        weeklyChart.destroy();
+    }
+    
+    // 准备数据
+    const days = [];
+    const amounts = [];
+    
+    // 获取过去7天的数据
+    for (let i = 6; i >= 0; i--) {
+        const date = luxon.DateTime.local().minus({days: i}).toFormat('yyyy-MM-dd');
+        const dayName = luxon.DateTime.local().minus({days: i}).toFormat('ccc');
+        days.push(dayName);
+        
+        let total = 0;
+        if (waterData.history[date]) {
+            Object.keys(waterData.history[date]).forEach(hour => {
+                waterData.history[date][hour].forEach(amount => {
+                    total += amount;
+                });
+            });
+        }
+        
+        amounts.push(total);
+    }
+    
+    // 创建图表
+    weeklyChart = new Chart(weeklyChartEl, {
+        type: 'line',
         data: {
-            labels: hours,
+            labels: days,
             datasets: [{
-                label: '每小时饮水量 (ml)',
-                data,
-                backgroundColor: data.map(v => v > 0 ? 'var(--primary-color)' : '#eee'),
-                borderRadius: 8
+                label: '每日饮水量 (ml)',
+                data: amounts,
+                backgroundColor: 'rgba(79, 195, 247, 0.2)',
+                borderColor: 'rgba(79, 195, 247, 1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true
             }]
         },
         options: {
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, max: Math.max(...data, 400) } }
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: '饮水量 (ml)'
+                    }
+                }
+            }
         }
     });
 }
@@ -444,529 +457,340 @@ function renderHourChart() {
 // ----------------- 成就系统 -----------------
 const ACHIEVEMENTS = [
     {id: 'first', name: '第一次打卡', desc: '记录你的第一杯水！', icon: 'https://cdn-icons-png.flaticon.com/512/824/824239.png'},
-    {id: 'streak3', name: '坚持3天', desc: '连续3天达成目标', icon: 'https://cdn-icons-png.flaticon.com/512/3081/3081559.png'},
-    {id: 'streak7', name: '坚持7天', desc: '连续7天达成目标', icon: 'https://cdn-icons-png.flaticon.com/512/3081/3081578.png'},
-    {id: 'goal2000', name: '喝满2L', desc: '单日饮水量达到2000ml', icon: 'https://cdn-icons-png.flaticon.com/512/3081/3081589.png'},
-    {id: 'goal3000', name: '超越自我', desc: '单日饮水量达到3000ml', icon: 'https://cdn-icons-png.flaticon.com/512/3081/3081592.png'},
+    {id: 'daily_goal', name: '达成目标', desc: '完成每日饮水目标', icon: 'https://cdn-icons-png.flaticon.com/512/3588/3588310.png'},
+    {id: 'streak3', name: '连续3天', desc: '连续3天记录饮水', icon: 'https://cdn-icons-png.flaticon.com/512/2553/2553691.png'},
+    {id: 'streak7', name: '一周坚持', desc: '连续7天记录饮水', icon: 'https://cdn-icons-png.flaticon.com/512/3112/3112946.png'},
+    {id: 'streak30', name: '月度达人', desc: '连续30天记录饮水', icon: 'https://cdn-icons-png.flaticon.com/512/2553/2553691.png'},
+    {id: 'early_bird', name: '早起喝水', desc: '早上8点前记录饮水', icon: 'https://cdn-icons-png.flaticon.com/512/2972/2972531.png'},
+    {id: 'night_owl', name: '夜猫子', desc: '晚上10点后记录饮水', icon: 'https://cdn-icons-png.flaticon.com/512/2972/2972510.png'},
     {id: 'custom', name: '自定义饮水', desc: '使用自定义饮水量打卡', icon: 'https://cdn-icons-png.flaticon.com/512/3081/3081566.png'}
 ];
 
+// 检查成就
 function checkAchievements() {
-    let unlocked = waterData.achievements || [];
-    let todayTotal = getTodayTotal();
-    let streak = 0;
-    // 连续天数
-    const days = Object.keys(waterData.history).sort();
-    for (let i = days.length - 1; i >= 0; i--) {
-        const date = days[i];
-        const total = waterData.history[date].reduce((a, b) => a + b, 0);
-        if (total >= settings.dailyGoal) streak++;
-        else break;
+    // 初始化成就数组
+    if (!waterData.achievements) {
+        waterData.achievements = [];
     }
-    // 检查成就
+    
     const newAchievements = [];
-    if (!unlocked.includes('first') && todayTotal > 0) newAchievements.push('first');
-    if (!unlocked.includes('streak3') && streak >= 3) newAchievements.push('streak3');
-    if (!unlocked.includes('streak7') && streak >= 7) newAchievements.push('streak7');
-    if (!unlocked.includes('goal2000') && todayTotal >= 2000) newAchievements.push('goal2000');
-    if (!unlocked.includes('goal3000') && todayTotal >= 3000) newAchievements.push('goal3000');
-    // 自定义饮水
-    if (!unlocked.includes('custom') && waterData.history[today] && waterData.history[today].some(a => a % 50 !== 0)) newAchievements.push('custom');
+    
+    // 第一次打卡
+    if (!waterData.achievements.includes('first')) {
+        waterData.achievements.push('first');
+        newAchievements.push('first');
+    }
+    
+    // 达成每日目标
+    if (getTodayTotal() >= settings.dailyGoal && !waterData.achievements.includes('daily_goal')) {
+        waterData.achievements.push('daily_goal');
+        newAchievements.push('daily_goal');
+    }
+    
+    // 连续打卡
+    if (waterData.streak >= 3 && !waterData.achievements.includes('streak3')) {
+        waterData.achievements.push('streak3');
+        newAchievements.push('streak3');
+    }
+    
+    if (waterData.streak >= 7 && !waterData.achievements.includes('streak7')) {
+        waterData.achievements.push('streak7');
+        newAchievements.push('streak7');
+    }
+    
+    if (waterData.streak >= 30 && !waterData.achievements.includes('streak30')) {
+        waterData.achievements.push('streak30');
+        newAchievements.push('streak30');
+    }
+    
+    // 早起喝水
+    const hour = parseInt(currentHour);
+    if (hour < 8 && !waterData.achievements.includes('early_bird')) {
+        waterData.achievements.push('early_bird');
+        newAchievements.push('early_bird');
+    }
+    
+    // 夜猫子
+    if (hour >= 22 && !waterData.achievements.includes('night_owl')) {
+        waterData.achievements.push('night_owl');
+        newAchievements.push('night_owl');
+    }
+    
+    // 显示新解锁的成就
     if (newAchievements.length > 0) {
-        unlocked = unlocked.concat(newAchievements);
-        waterData.achievements = unlocked;
-        localStorage.setItem('waterData', JSON.stringify(waterData));
-        renderAchievements();
-        showAchievementModal(newAchievements[0]);
-    } else {
-        renderAchievements();
+        showAchievementUnlocked(newAchievements[0]);
     }
+    
+    // 更新成就显示
+    renderAchievements();
 }
 
+// 渲染成就列表
 function renderAchievements() {
-    achievementsContainer.innerHTML = '';
-    (ACHIEVEMENTS).forEach(a => {
-        const unlocked = (waterData.achievements || []).includes(a.id);
-        achievementsContainer.innerHTML += `<div class="achievement${unlocked ? ' unlocked' : ''}" data-id="${a.id}">
-            <img src="${a.icon}" alt="${a.name}"/>
-            <span class="achievement-name">${a.name}</span>
-        </div>`;
-    });
-    // 点击成就弹窗
-    document.querySelectorAll('.achievement').forEach(el => {
-        el.onclick = () => {
-            const id = el.getAttribute('data-id');
-            showAchievementModal(id);
-        };
-    });
-}
-
-function showAchievementModal(id) {
-    const a = ACHIEVEMENTS.find(a => a.id === id);
-    if (!a) return;
-    achievementIcon.src = a.icon;
-    achievementTitle.textContent = a.name;
-    achievementDesc.textContent = a.desc;
-    achievementModal.style.display = 'flex';
-    // 撒花动画
-    for (let i = 0; i < 24; i++) {
-        const confetti = document.createElement('div');
-        confetti.className = 'confetti';
-        confetti.style.left = Math.random() * 100 + 'vw';
-        confetti.style.backgroundColor = `hsl(${Math.random()*360},80%,70%)`;
-        confetti.style.animation = `confettiFall 1.2s linear forwards`;
-        confetti.style.animationDelay = (Math.random() * 0.5) + 's';
-        document.body.appendChild(confetti);
-        setTimeout(() => confetti.remove(), 2000);
-    }
-}
-
-// ----------------- 设置与主题 -----------------
-settingsBtn.onclick = () => {
-    dailyGoalInput.value = settings.dailyGoal;
-    reminderToggle.checked = settings.reminder;
-    reminderIntervalInput.value = settings.reminderInterval;
-    themeSelect.value = settings.theme;
-    settingsModal.style.display = 'flex';
-};
-closeBtns.forEach(btn => btn.onclick = () => btn.closest('.modal').style.display = 'none');
-saveSettingsBtn.onclick = () => {
-    settings.dailyGoal = parseInt(dailyGoalInput.value) || DEFAULT_DAILY_GOAL;
-    settings.reminder = reminderToggle.checked;
-    settings.reminderInterval = parseInt(reminderIntervalInput.value) || DEFAULT_REMINDER_INTERVAL;
-    settings.theme = themeSelect.value;
-    localStorage.setItem('waterSettings', JSON.stringify(settings));
-    document.body.className = `theme-${settings.theme}`;
-    settingsModal.style.display = 'none';
-    updateProgressUI();
-    renderChart();
-};
-// 主题切换
-if (settings.theme && settings.theme !== 'default') {
-    document.body.className = `theme-${settings.theme}`;
-}
-
-// ----------------- 饮水记录按钮 -----------------
-waterOptionBtns.forEach(btn => {
-    btn.onclick = () => {
-        const amount = parseInt(btn.getAttribute('data-amount'));
-        addWater(amount);
-    };
-});
-addCustomBtn.onclick = () => {
-    const amount = parseInt(customAmountInput.value);
-    if (amount && amount > 0) {
-        addWater(amount);
-        customAmountInput.value = '';
-    }
-};
-
-// ----------------- 饮水提醒 -----------------
-let reminderTimer = null;
-function setupReminder() {
-    if (reminderTimer) clearInterval(reminderTimer);
-    if (settings.reminder) {
-        reminderTimer = setInterval(() => {
-            showCuteReminder();
-        }, settings.reminderInterval * 60 * 1000);
-    }
-}
-toastCloseBtn.onclick = () => {
-    reminderToast.style.display = 'none';
-};
-setupReminder();
-
-// 可爱提醒弹窗
-function showCuteReminder() {
-    reminderToast.querySelector('p').textContent = randomReminderText();
-    reminderToast.style.display = 'block';
-}
-function randomReminderText() {
-    const arr = [
-        '水精灵来提醒你啦～喝一口水，皮肤会更好哦！',
-        '喝水时间到，补充水分是美丽秘诀！',
-        '亲爱的，来点水润一下自己吧（＾▽＾）',
-        '多喝水，元气满满每一天！',
-        '小仙女要记得喝水哟～',
-        '水水喝起来，活力一整天！',
-        '一起变美从喝水开始！',
-    ];
-    return arr[Math.floor(Math.random() * arr.length)];
-}
-
-reminderToggle.onchange = () => {
-    document.getElementById('reminder-interval-group').style.display = reminderToggle.checked ? 'block' : 'none';
-};
-document.getElementById('reminder-interval-group').style.display = reminderToggle.checked ? 'block' : 'none';
-
-// ----------------- 动画与互动反馈 -----------------
-function showDrinkAnimation(amount) {
-    const container = document.getElementById('drink-animation-container');
-    if (!container) return;
-    container.innerHTML = '';
-    const drop = document.createElement('div');
-    drop.className = 'drink-drop';
-    drop.innerHTML = '<svg width="40" height="40" viewBox="0 0 40 40"><ellipse cx="20" cy="30" rx="10" ry="14" fill="#4fc3f7"/><ellipse cx="20" cy="16" rx="7" ry="10" fill="#b3e5fc" opacity="0.7"/></svg>';
-    container.appendChild(drop);
-    drop.animate([
-        {transform: 'translateY(-30px) scale(0.9)'},
-        {transform: 'translateY(0) scale(1.1)'},
-        {transform: 'translateY(10px) scale(1)'},
-        {transform: 'translateY(0) scale(1)'}
-    ], {duration: 700, easing: 'ease'});
-    setTimeout(() => { drop.remove(); }, 800);
-}
-function showEmojiFeedback(amount) {
-    const container = document.getElementById('drink-animation-container');
-    if (!container) return;
-    const emojiArr = ['💧','🌸','🥤','✨','😊','🧃','🥛','🦋','🍉','🍋'];
-    const emoji = document.createElement('span');
-    emoji.className = 'drink-emoji-feedback';
-    emoji.textContent = emojiArr[Math.floor(Math.random()*emojiArr.length)];
-    emoji.style.position = 'absolute';
-    emoji.style.left = (Math.random()*80+10) + '%';
-    emoji.style.top = (Math.random()*20+10) + '%';
-    emoji.style.fontSize = '2.2rem';
-    emoji.style.opacity = 0.85;
-    emoji.animate([
-        {transform:'scale(0.7) translateY(0)', opacity:0.9},
-        {transform:'scale(1.2) translateY(-30px)', opacity:0.6},
-        {transform:'scale(1) translateY(-60px)', opacity:0}
-    ], {duration: 1200, easing:'ease-out'});
-    container.appendChild(emoji);
-    setTimeout(()=>emoji.remove(), 1300);
-}
-
-// ----------------- 情侣互动功能 -----------------
-// 更新情侣比赛数据
-function updateCoupleCompetition() {
-    // 检查是否需要重置每周数据
-    const lastReset = luxon.DateTime.fromISO(coupleData.weeklyCompetition.lastReset);
-    const now = luxon.DateTime.local();
-    const diffDays = now.diff(lastReset, 'days').days;
+    if (!achievementsContainerEl) return;
     
-    if (diffDays >= 7) {
-        // 重置每周数据
-        coupleData.weeklyCompetition = {
-            user1: 0,
-            user2: 0,
-            lastReset: now.toFormat('yyyy-MM-dd')
-        };
-        localStorage.setItem('coupleData', JSON.stringify(coupleData));
-    }
+    // 清空容器
+    achievementsContainerEl.innerHTML = '';
     
-    // 更新比赛条
-    const user1Amount = coupleData.weeklyCompetition.user1;
-    const user2Amount = coupleData.weeklyCompetition.user2;
-    const total = user1Amount + user2Amount;
-    
-    if (total > 0) {
-        const user1Percent = Math.round((user1Amount / total) * 100);
-        const user2Percent = 100 - user1Percent;
+    // 添加所有成就
+    ACHIEVEMENTS.forEach(achievement => {
+        const isUnlocked = waterData.achievements && waterData.achievements.includes(achievement.id);
         
-        user1ProgressBarEl.style.width = user1Percent + '%';
-        user2ProgressBarEl.style.width = user2Percent + '%';
-        user1AmountCompEl.textContent = user1Amount + 'ml';
-        user2AmountCompEl.textContent = user2Amount + 'ml';
+        const achievementEl = document.createElement('div');
+        achievementEl.className = `achievement ${isUnlocked ? '' : 'locked'}`;
         
-        // 更新比赛结果
-        if (user1Amount > user2Amount) {
-            competitionResultEl.textContent = `${settings.user1.name}本周领先${user1Amount - user2Amount}ml！`;
-        } else if (user2Amount > user1Amount) {
-            competitionResultEl.textContent = `${settings.user2.name}本周领先${user2Amount - user1Amount}ml！`;
-        } else {
-            competitionResultEl.textContent = '两人打成平手，继续努力！';
-        }
-    } else {
-        competitionResultEl.textContent = '本周比赛还未开始，喝水打卡吧！';
-    }
-}
-
-// 发送鼓励消息
-function sendEncouragement() {
-    const sender = currentUser;
-    const receiver = currentUser === 'user1' ? 'user2' : 'user1';
-    const message = getRandomEncouragement();
-    
-    // 添加消息
-    coupleData.messages.push({
-        sender,
-        receiver,
-        message,
-        timestamp: luxon.DateTime.local().toISO()
+        achievementEl.innerHTML = `
+            <img src="${achievement.icon}" alt="${achievement.name}" class="achievement-icon">
+            <div class="achievement-name">${achievement.name}</div>
+        `;
+        
+        // 添加提示
+        achievementEl.title = achievement.desc;
+        
+        // 添加点击事件
+        achievementEl.addEventListener('click', () => {
+            showAchievementDetails(achievement.id);
+        });
+        
+        achievementsContainerEl.appendChild(achievementEl);
     });
-    
-    // 最多保存20条消息
-    if (coupleData.messages.length > 20) {
-        coupleData.messages.shift();
-    }
-    
-    localStorage.setItem('coupleData', JSON.stringify(coupleData));
-    
-    // 显示发送成功提示
-    showToast('鼓励消息已发送！');
 }
 
-// 随机鼓励消息
-function getRandomEncouragement() {
-    const messages = [
-        '亲爱的，你今天喝水了吗？记得多喝水哦～',
-        '我今天已经喝了两杯水了，你呢？一起努力吧！',
-        '你是最棒的，继续保持健康饮水习惯！',
-        '我们一起变得更健康吧！爱你哦❤️',
-        '今天的水喝了吗？不要忘记了哦！',
-        '我们比赛一下谁喝水多！赢家有奖哦～',
-        '健康生活从喝水开始，爱你的我在给你加油！'
-    ];
-    return messages[Math.floor(Math.random() * messages.length)];
-}
-
-// 显示最新的鼓励消息
-function showLatestEncouragement() {
-    const receiver = currentUser;
-    const messages = coupleData.messages.filter(m => m.receiver === receiver);
+// 显示成就解锁提示
+function showAchievementUnlocked(achievementId) {
+    const achievement = ACHIEVEMENTS.find(a => a.id === achievementId);
+    if (!achievement) return;
     
-    if (messages.length > 0) {
-        const latest = messages[messages.length - 1];
-        const senderName = latest.sender === 'user1' ? settings.user1.name : settings.user2.name;
-        
-        coupleMessageEl.querySelector('.message-bubble').innerHTML = 
-            `<strong>${senderName}:</strong> ${latest.message}`;
+    // 设置模态框内容
+    const iconEl = document.getElementById('achievement-icon');
+    const titleEl = document.getElementById('achievement-title');
+    const descEl = document.getElementById('achievement-description');
+    
+    if (iconEl) iconEl.src = achievement.icon;
+    if (titleEl) titleEl.textContent = `新成就解锁：${achievement.name}`;
+    if (descEl) descEl.textContent = achievement.desc;
+    
+    // 显示模态框
+    if (achievementModalEl) {
+        achievementModalEl.style.display = 'block';
     }
 }
 
-// 显示提示消息
-function showToast(message) {
-    const toast = document.createElement('div');
-    toast.className = 'custom-toast';
-    toast.textContent = message;
-    document.body.appendChild(toast);
+// 显示成就详情
+function showAchievementDetails(achievementId) {
+    const achievement = ACHIEVEMENTS.find(a => a.id === achievementId);
+    if (!achievement) return;
     
-    setTimeout(() => {
-        toast.classList.add('show');
-    }, 10);
+    // 设置模态框内容
+    const iconEl = document.getElementById('achievement-icon');
+    const titleEl = document.getElementById('achievement-title');
+    const descEl = document.getElementById('achievement-description');
     
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
-
-// ----------------- 用户切换 -----------------
-// 切换用户
-function switchUser(user) {
-    console.log('Switching to user:', user);
-    currentUser = user;
+    if (iconEl) iconEl.src = achievement.icon;
+    if (titleEl) titleEl.textContent = achievement.name;
+    if (descEl) descEl.textContent = achievement.desc;
     
-    // 更新按钮状态
-    if (user1BtnEl && user2BtnEl) {
-        if (user === 'user1') {
-            user1BtnEl.classList.add('active');
-            user2BtnEl.classList.remove('active');
-        } else {
-            user1BtnEl.classList.remove('active');
-            user2BtnEl.classList.add('active');
-        }
+    // 显示模态框
+    if (achievementModalEl) {
+        achievementModalEl.style.display = 'block';
     }
-    
-    // 更新UI
-    updateUI();
-    updateStats();
-    renderHourChart();
-    renderWeeklyChart();
-    showLatestEncouragement();
-    
-    // 强制更新水瓶高度
-    setTimeout(updateWaterBottles, 100);
 }
 
-// ----------------- 设置相关 -----------------
-// 切换设置选项卡
-function switchSettingsTab(tab) {
-    settingsTabs.forEach(t => t.classList.remove('active'));
-    document.querySelector(`.settings-tab[data-tab="${tab}"]`).classList.add('active');
+// ----------------- 设置 -----------------
+// 打开设置模态框
+function openSettingsModal() {
+    // 填充当前设置
+    const dailyGoalInput = document.getElementById('daily-goal');
+    const reminderToggle = document.getElementById('reminder-toggle');
+    const reminderIntervalInput = document.getElementById('reminder-interval');
+    const themeSelect = document.getElementById('theme-select');
     
-    // 显示对应的设置面板
-    personalSettingsEl.style.display = tab === 'personal-settings' ? 'block' : 'none';
-    coupleSettingsEl.style.display = tab === 'couple-settings' ? 'block' : 'none';
+    if (dailyGoalInput) dailyGoalInput.value = settings.dailyGoal;
+    if (reminderToggle) reminderToggle.checked = settings.reminder;
+    if (reminderIntervalInput) reminderIntervalInput.value = settings.reminderInterval;
+    if (themeSelect) themeSelect.value = settings.theme;
+    
+    // 显示模态框
+    if (settingsModalEl) {
+        settingsModalEl.style.display = 'block';
+    }
 }
 
 // 保存设置
 function saveSettings() {
-    // 保存用户名
-    if (user1NameInputEl.value.trim()) {
-        settings.user1.name = user1NameInputEl.value.trim();
-    }
-    if (user2NameInputEl.value.trim()) {
-        settings.user2.name = user2NameInputEl.value.trim();
-    }
+    const dailyGoalInput = document.getElementById('daily-goal');
+    const reminderToggle = document.getElementById('reminder-toggle');
+    const reminderIntervalInput = document.getElementById('reminder-interval');
+    const themeSelect = document.getElementById('theme-select');
     
-    // 保存当前用户的设置
-    settings.user1.dailyGoal = parseInt(dailyGoalInput.value) || DEFAULT_DAILY_GOAL;
-    settings.user1.reminder = reminderToggle.checked;
-    settings.user1.reminderInterval = parseInt(reminderIntervalInput.value) || DEFAULT_REMINDER_INTERVAL;
-    
-    // 保存主题
-    settings.theme = themeSelect.value;
-    document.body.className = `theme-${settings.theme}`;
+    // 更新设置
+    if (dailyGoalInput) settings.dailyGoal = parseInt(dailyGoalInput.value);
+    if (reminderToggle) settings.reminder = reminderToggle.checked;
+    if (reminderIntervalInput) settings.reminderInterval = parseInt(reminderIntervalInput.value);
+    if (themeSelect) settings.theme = themeSelect.value;
     
     // 保存设置
     localStorage.setItem('waterSettings', JSON.stringify(settings));
     
-    // 显示保存成功提示
-    settingsSavedMsgEl.style.display = 'block';
-    setTimeout(() => {
-        settingsSavedMsgEl.style.display = 'none';
-    }, 2000);
+    // 应用主题
+    applyTheme(settings.theme);
+    
+    // 更新提醒
+    if (settings.reminder) {
+        setupReminders();
+    }
     
     // 更新UI
     updateUI();
-    setupReminder();
+    
+    // 关闭模态框
+    closeAllModals();
+    
+    // 显示提示
+    showToast('设置已保存！');
 }
 
-// ----------------- 初始化 -----------------
-function init() {
-    // 先检查并初始化DOM元素
-    initDomElements();
+// 应用主题
+function applyTheme(theme) {
+    const root = document.documentElement;
     
-    // 初始化UI
+    switch (theme) {
+        case 'pink':
+            root.style.setProperty('--primary-color', '#ff80ab');
+            root.style.setProperty('--primary-dark', '#c94f7c');
+            root.style.setProperty('--primary-light', '#ffe1ec');
+            break;
+        case 'purple':
+            root.style.setProperty('--primary-color', '#b388ff');
+            root.style.setProperty('--primary-dark', '#805acb');
+            root.style.setProperty('--primary-light', '#e9ddff');
+            break;
+        case 'green':
+            root.style.setProperty('--primary-color', '#69f0ae');
+            root.style.setProperty('--primary-dark', '#2bbd7e');
+            root.style.setProperty('--primary-light', '#e0f7ef');
+            break;
+        default: // 默认蓝色
+            root.style.setProperty('--primary-color', '#4fc3f7');
+            root.style.setProperty('--primary-dark', '#0093c4');
+            root.style.setProperty('--primary-light', '#e6f7ff');
+    }
+}
+
+// ----------------- 工具函数 -----------------
+// 显示自定义喝水量模态框
+function showCustomAmountModal() {
+    if (customAmountModalEl) {
+        customAmountModalEl.style.display = 'block';
+    }
+}
+
+// 清除所有数据
+function clearAllData() {
+    // 初始化空数据
+    waterData = {
+        history: {},
+        streak: 0,
+        bestDay: null,
+        achievements: []
+    };
+    
+    // 保存到本地存储
+    localStorage.setItem('waterData', JSON.stringify(waterData));
+    
+    // 更新UI
     updateUI();
-    updateStats();
-    renderWeeklyChart();
     renderHourChart();
+    renderWeeklyChart();
     renderAchievements();
-    checkAchievements();
-    setupReminder();
-    updateCoupleCompetition();
-    showLatestEncouragement();
     
-    // 初始化设置面板
-    if (user1NameInputEl) user1NameInputEl.value = settings.user1.name;
-    if (user2NameInputEl) user2NameInputEl.value = settings.user2.name;
-    if (dailyGoalInput) dailyGoalInput.value = settings.user1.dailyGoal;
-    if (reminderToggle) reminderToggle.checked = settings.user1.reminder;
-    if (reminderIntervalInput) reminderIntervalInput.value = settings.user1.reminderInterval;
-    if (themeSelect) themeSelect.value = settings.theme;
-    if (syncCodeEl) syncCodeEl.value = settings.userId;
+    // 显示提示
+    showToast('所有喝水记录已清除！');
     
-    // 绑定事件
-    bindEvents();
+    console.log('数据已清除');
 }
 
-// 初始化DOM元素
-function initDomElements() {
-    // 水瓶和用户切换
-    user1BtnEl = document.getElementById('user1-btn');
-    user2BtnEl = document.getElementById('user2-btn');
-    waterLevelUser1El = document.getElementById('water-level-user1');
-    waterLevelUser2El = document.getElementById('water-level-user2');
-    user1NameEl = document.getElementById('user1-name');
-    user2NameEl = document.getElementById('user2-name');
-    currentUserTitleEl = document.getElementById('current-user-title');
-    
-    // 饮水数据和进度
-    currentAmountEl = document.getElementById('current-amount');
-    targetAmountEl = document.getElementById('target-amount');
-    percentageEl = document.getElementById('percentage');
-    currentHourAmountEl = document.getElementById('current-hour-amount');
-    
-    console.log('DOM elements initialized:', {
-        user1BtnEl, user2BtnEl, waterLevelUser1El, waterLevelUser2El,
-        currentAmountEl, targetAmountEl, percentageEl
+// 关闭所有模态框
+function closeAllModals() {
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        modal.style.display = 'none';
     });
 }
 
-// 绑定所有事件
-function bindEvents() {
-    // 绑定用户切换事件
-    if (user1BtnEl) {
-        user1BtnEl.addEventListener('click', function() {
-            console.log('User 1 button clicked');
-            switchUser('user1');
-        });
+// 显示提示
+function showToast(message) {
+    const toastContent = document.querySelector('.toast-content p');
+    if (toastContent) {
+        toastContent.textContent = message;
     }
     
-    if (user2BtnEl) {
-        user2BtnEl.addEventListener('click', function() {
-            console.log('User 2 button clicked');
-            switchUser('user2');
-        });
-    }
-    
-    // 绑定设置选项卡切换
-    if (settingsTabs) {
-        settingsTabs.forEach(tab => {
-            tab.addEventListener('click', () => switchSettingsTab(tab.getAttribute('data-tab')));
-        });
-    }
-    
-    // 绑定数据图表切换
-    if (tabChartsBtn && tabCoupleBtn && chartsTabEl && coupleTabEl) {
-        tabChartsBtn.addEventListener('click', () => {
-            tabChartsBtn.classList.add('active');
-            tabCoupleBtn.classList.remove('active');
-            chartsTabEl.classList.add('active');
-            coupleTabEl.classList.remove('active');
-        });
+    if (reminderToastEl) {
+        reminderToastEl.classList.add('show');
         
-        tabCoupleBtn.addEventListener('click', () => {
-            tabChartsBtn.classList.remove('active');
-            tabCoupleBtn.classList.add('active');
-            chartsTabEl.classList.remove('active');
-            coupleTabEl.classList.add('active');
-        });
-    }
-    
-    // 绑定发送鼓励按钮
-    if (sendEncouragementBtn) {
-        sendEncouragementBtn.addEventListener('click', sendEncouragement);
-    }
-    
-    // 绑定复制同步码按钮
-    if (copySyncCodeBtn && syncCodeEl) {
-        copySyncCodeBtn.addEventListener('click', () => {
-            syncCodeEl.select();
-            document.execCommand('copy');
-            showToast('同步码已复制到剪贴板！');
-        });
-    }
-    
-    // 绑定关联伴侣按钮
-    if (connectPartnerBtn && partnerSyncCodeEl) {
-        connectPartnerBtn.addEventListener('click', () => {
-            const code = partnerSyncCodeEl.value.trim();
-            if (code) {
-                settings.partnerId = code;
-                localStorage.setItem('waterSettings', JSON.stringify(settings));
-                showToast('关联成功！现在可以互相鼓励了！');
-            }
-        });
-    }
-    
-    // 绑定保存设置按钮
-    if (saveSettingsBtn) {
-        saveSettingsBtn.addEventListener('click', saveSettings);
-    }
-    
-    // 绑定水滴按钮
-    if (waterOptionBtns) {
-        waterOptionBtns.forEach(btn => {
-            btn.onclick = () => {
-                const amount = parseInt(btn.getAttribute('data-amount'));
-                addWater(amount);
-            };
-        });
-    }
-    
-    if (addCustomBtn && customAmountInput) {
-        addCustomBtn.onclick = () => {
-            const amount = parseInt(customAmountInput.value);
-            if (amount && amount > 0) {
-                addWater(amount);
-                customAmountInput.value = '';
-            }
-        };
+        // 自动隐藏
+        setTimeout(() => {
+            hideToast();
+        }, 3000);
     }
 }
 
+// 隐藏提示
+function hideToast() {
+    if (reminderToastEl) {
+        reminderToastEl.classList.remove('show');
+    }
+}
+
+// 设置提醒
+function setupReminders() {
+    // 清除现有提醒
+    if (window.reminderInterval) {
+        clearInterval(window.reminderInterval);
+    }
+    
+    // 设置新提醒
+    window.reminderInterval = setInterval(() => {
+        const total = getTodayTotal();
+        if (total < settings.dailyGoal) {
+            showToast(`玮恩，该喝水啦！今天还需要喝${settings.dailyGoal - total}ml水哦～`);
+        }
+    }, settings.reminderInterval * 60 * 1000);
+}
+
+// 显示每日提示
+function showDailyTip() {
+    const tips = [
+        "每天喝足够的水有助于保持皮肤水分，增强新陈代谢，提高身体免疫力！",
+        "研究表明，适量饮水可以帮助减轻头痛和疲劳感。",
+        "喝水前先喝一小口，让口腔适应，然后再大口喝水更健康。",
+        "早上起床后喝一杯水，可以帮助激活身体机能。",
+        "运动前后半小时内适量饮水，有助于提高运动效果和恢复。",
+        "长时间使用电子设备会导致眼睛干涩，多喝水可以缓解这种情况。",
+        "饭前喝水可以增加饱腹感，有助于控制食量。",
+        "喝水时最好小口慢饮，避免一次性大量饮水。"
+    ];
+    
+    const tipEl = document.getElementById('daily-tip');
+    if (tipEl) {
+        // 根据日期选择提示，确保每天提示不同
+        const dayOfYear = luxon.DateTime.local().ordinal;
+        const tipIndex = dayOfYear % tips.length;
+        tipEl.innerHTML = `<p>${tips[tipIndex]}</p>`;
+    }
+}
+
+// 显示喝水动画
+function showDrinkAnimation() {
+    // 水波纹动画效果
+    const waterLevelEl = document.getElementById('water-level');
+    if (waterLevelEl) {
+        waterLevelEl.classList.add('animate');
+        setTimeout(() => {
+            waterLevelEl.classList.remove('animate');
+        }, 1000);
+    }
+}
+
+// 页面加载完成后初始化
 window.onload = init;
